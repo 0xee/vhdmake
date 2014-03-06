@@ -1,0 +1,1648 @@
+#include "DesignFile.h"
+#include <iostream>
+
+COMPILER VHDL
+         
+
+         typedef std::list<std::string> StrList;
+         /** 
+         * Returns the current token as std::string
+         * 
+         * @return Current token
+         */           
+         std::string CurrentToken() const {
+             char * cstr = coco_string_create_char(t->val);
+             std::string str(cstr);
+             coco_string_delete(cstr);
+             return str;
+         }
+         void Print(std::string const & str) {
+              std::cout << str << std::endl;
+         }      
+    void Parse(DesignFile * df) {
+         mpDf = df;
+         if(mpDf) {
+             Parse();
+         }
+    }
+         
+    DesignFile * mpDf;
+	
+	//group_template = group Identifier is lparen ...
+	//GroupDeclaration = group Identifier colon ...
+	//la == group
+	bool isGroupTemplate() {
+		if (la->kind!=_group) return false;
+		scanner->ResetPeek();
+		scanner->Peek();
+		Token * next = scanner->Peek();
+		return next->kind==_is;
+	}
+
+	//AttributeDeclaration = attribute Identifier colon TypeMark semicolon 
+	//AttributeSpecification = attribute Identifier of EntityNameList colon EntityClass is Expression semicolon 
+	//la == attribute
+	bool isAttributeDeclaration() {
+		if (la->kind!=_attribute) return false;
+		scanner->ResetPeek();
+		scanner->Peek();
+		Token * next=scanner->Peek();
+		return next->kind==_colon;
+	}
+
+	//PhysicalTypeDefinition = range Range units ...
+	//IntegerOrFloatingPointTypeDefinition = range Range semicolon
+	//la == range
+	bool isPhysicalType() {
+		if (la->kind!=_range) return false;
+		scanner->ResetPeek();
+		Token * next;
+		do {
+			next = scanner->Peek();
+		}while (next->kind!=_units && next->kind!=_semicolon && next->kind!=_EOF);
+		return next->kind==_units;
+	}
+
+	//constrained array = lparen IndexSubtypeDefinition { comma IndexSubtypeDefinition } rparen of SubtypeIndication
+	//IndexSubtypeDefinition = TypeMark range box
+	//IndexConstraint = lparen DiscreteRange { comma DiscreteRange } rparen
+	//la==lparen
+	bool isIndexSubtypeDefinition() {
+		scanner->ResetPeek();
+		Token * next;
+		do {
+			next = scanner->Peek();
+		}while (next->kind!=_box && next->kind!=_semicolon && next->kind!=_rparen && next->kind!=_lparen && next->kind!=_EOF);
+		return next->kind==_box;
+	}
+	
+	//ProcedureCallStatement = SelectedName [lparen AssociationList rparen] semicolon
+	//SignalOrVariableAssignmentStatement = Target (varAssign | leq) ....
+	//Target = Name | Aggregate
+	bool isAssignmentStatement() {
+		scanner->ResetPeek();
+		Token * next;
+		int count=0;
+		do {
+			next = scanner->Peek();
+			if (next->kind==_lparen) count++;
+			else if (next->kind==_rparen) count--;
+		}while (next->kind!=_varAssign && next->kind!=_leq && next->kind!=_semicolon && next->kind!=_EOF);
+		return (next->kind==_varAssign || next->kind==_leq) && count==0;
+	}
+	
+	//ConcurrentSignalAssignmentStatement = (Target leq | with) ....
+	//ConcurrentProcedureCallStatement = SelectedName [lparen AssociationList rparen] semicolon
+	bool isConcurrentSignalAssignmentStatement() {
+		if (la->kind==_with) return true;
+		scanner->ResetPeek();
+		Token * next;
+		do {
+			next = scanner->Peek();
+		}while (next->kind!=_leq && next->kind!=_semicolon && next->kind!=_EOF);
+		return next->kind==_leq;
+	}
+
+	//For those parameters with modes, the only modes that are allowed for formal parameters of a procedure are
+	//in, inout, and out. If the mode is in and no object class is explicitly specified, constant is assumed. If the
+	//mode is inout or out, and no object class is explicitly specified, variable is assumed.
+	//
+	//InterfaceConstantDeclaration = [constant] IdentifierList colon [in] SubtypeIndication [varAssign Expression] 
+	bool isInterfaceConstantDeclaration() {
+		if (la->kind==_constant) return true;
+		else if (la->kind==_variable || la->kind==_signal || la->kind==_file) return false;
+		scanner->ResetPeek();
+		Token * next;
+		do {
+			next = scanner->Peek();
+		}while (next->kind!=_varAssign && next->kind!=_semicolon && next->kind!=_in && next->kind!=_EOF);
+		return next->kind==_in;
+	}
+	
+	//InterfaceVariableDeclaration = [variable] IdentifierList colon [InterfaceMode] SubtypeIndication [varAssign Expression]
+	bool isInterfaceVariableDeclaration() {
+		if (la->kind==_variable) return true;
+		else if (la->kind==_constant || la->kind==_signal || la->kind==_file) return false;
+		scanner->ResetPeek();
+		Token * next;
+		do {
+			next = scanner->Peek();
+		}while (next->kind!=_varAssign && next->kind!=_semicolon && next->kind!=_in && next->kind!=_inout && next->kind!=_outToken && next->kind!=_EOF);
+		return next->kind==_inout || next->kind==_outToken;
+	}
+
+	//search fo TO or downto in Range: Expression Direction Expression
+	//Choice = DiscreteRange
+	//	| SimpleExpression
+	//	| others		
+	//Choices = Choice { bar Choice }
+	//CaseStatement = .... { when Choices arrow SequentialStatementList } ...
+	//ElementAssociation = [Choices arrow] Expression 
+	//SelectedWaveform = Waveform when Choices
+	//SelectedSignalAssignment = ... SelectedWaveform { comma SelectedWaveform } semicolon
+	bool isRangeInChoice() {
+		if (la->kind==_others) return false;
+		scanner->ResetPeek();
+		Token * next;
+		do {
+			next = scanner->Peek();
+		}while (next->kind!=_bar && next->kind!=_arrow && next->kind!=_comma && next->kind!=_semicolon && next->kind!=_to && next->kind!=_downto && next->kind!=_EOF);
+		return next->kind==_to || next->kind==_downto;
+	}
+	
+	//search fo TO or downto in Range = Expression Direction Expression
+	//BlockConfigurationIndex= 
+	//	  DiscreteRange
+	//	  | Expression
+	//BlockSpecification=
+	//	Identifier [lparen BlockConfigurationIndex rparen]
+	//	| SelectedName
+	//BlockConfiguration =
+	//		for BlockSpecification
+	//		{ UseClause }
+	//		{
+	//			blockConfiguration
+	//			| ComponentConfiguration
+	//		}
+	//		end for semicolon
+	bool isDiscreteRangeInBlockConfigurationIndex() {
+		scanner->ResetPeek();
+		Token * next;
+		do {
+			next = scanner->Peek();
+		}while (next->kind!=_use && next->kind!=_for && next->kind!=_end && next->kind!=_semicolon && next->kind!=_to && next->kind!=_downto && next->kind!=_EOF);
+		return next->kind==_to || next->kind==_downto;
+	}
+	
+	bool isArchitectureStatementWithLabel() {
+		if (la->kind==_component || la->kind==_entity || la->kind==_configuration  || la->kind==_block || la->kind==_for || la->kind==_if) return true;
+		else if (la->kind==_postponed || la->kind==_process || la->kind==_assert || la->kind==_file || isConcurrentSignalAssignmentStatement()) return false;
+		//distinguish between ComponentInstantiationStatement and ConcurrentProcedureCallStatement
+		scanner->ResetPeek();
+		Token * next;
+		do {
+			next = scanner->Peek();
+		}while (next->kind!=_generic && next->kind!=_port && next->kind!=_semicolon && next->kind!=_EOF);
+		return next->kind==_generic || next->kind==_port;
+	}
+
+	//SlicePart = lparen DiscreteRange rparen.
+	//name_indexed_part = lparen Expression { comma Expression }
+	//AssociationListPart = lparen AssociationList rparen
+	bool isSlicePart() {
+		if (la->kind!=_lparen) return false;
+		scanner->ResetPeek();
+		Token * next;
+		int count=1;//count lparen
+		do {
+			next = scanner->Peek();
+			if (next->kind==_lparen) count++;
+			else if (next->kind==_rparen) count--;
+		}while (count!=0 && next->kind!=_bar && next->kind!=_arrow && next->kind!=_semicolon && next->kind!=_to && next->kind!=_downto && next->kind!=_EOF);
+		return (next->kind==_to || next->kind==_downto) && count<=1;
+	}
+
+	//Choice =
+	//		IF(isRangeInChoice()) DiscreteRange
+	//		| SimpleExpression
+	//		| others
+	//Choices = Choice { bar Choice }.
+	//ElementAssociation = [IF(isChoiceInElementAssociation()) Choices arrow] Expression.
+	//Aggregate = lparen  ElementAssociation { comma ElementAssociation } rparen .
+	bool isChoiceInElementAssociation() {
+		scanner->ResetPeek();
+		Token * next=la;
+		int count=1;//count lparen
+		do {
+			if (next->kind==_lparen) count++;
+			else if (next->kind==_rparen) count--;
+			next = scanner->Peek();
+		}while (count!=0 && next->kind!=_comma && next->kind!=_arrow && next->kind!=_semicolon && next->kind!=_others && next->kind!=_EOF);
+		return (next->kind==_arrow || next->kind==_others) && count<=1;
+	}
+
+	//FormalPart = Name .
+	//ActualPart =  Expression | open .
+	//AssociationElement = [If(isFormalPartInAssociationElement()) FormalPart arrow] ActualPart .
+	//AssociationList = AssociationElement { comma AssociationElement }.
+	//lparen AssociationList rparen
+	bool isFormalPartInAssociationElement() {
+		if (la->kind!=_basicIdentifier && la->kind!=_extendedIdentifier) return false;
+		scanner->ResetPeek();
+		Token * next;
+		int count=0;
+		do {
+			next = scanner->Peek();
+			if (next->kind==_lparen) count++;
+			else if (next->kind==_rparen) count--;
+		}while (count>=0 && next->kind!=_comma && next->kind!=_others && next->kind!=_arrow && next->kind!=_semicolon && next->kind!=_open && next->kind!=_EOF);
+		return next->kind==_arrow && count==0;
+	}
+
+	//Range = SimpleExpression Direction SimpleExpression
+	//		  | Name
+	bool isNotNameInRange() {
+		scanner->ResetPeek();
+		Token * next;
+		do {
+			next = scanner->Peek();
+		}while (next->kind!=_units && next->kind!=_varAssign && next->kind!=_generate && next->kind!=_loop && next->kind!=_is && next->kind!=_open && next->kind!=_semicolon && next->kind!=_to && next->kind!=_downto && next->kind!=_EOF);
+		return next->kind==_to || next->kind==_downto;
+	}
+
+	//DiscreteRange = SubtypeIndication
+	//				  | Range.
+	bool isSubtypeIndicationInDiscreteRange() {
+		scanner->ResetPeek();
+		Token * next;
+		do {
+			next = scanner->Peek();
+		}while (next->kind!=_range && next->kind!=_apostrophe && next->kind!=_to && next->kind!=_downto && next->kind!=_lparen && next->kind!=_semicolon && next->kind!=_EOF);
+		return next->kind==_range;
+	}
+
+	bool isQualifiedExpression() {
+		if (la->kind!=_basicIdentifier && la->kind!=_extendedIdentifier) return false;
+		scanner->ResetPeek();
+		Token * next;
+		//match SelectedName
+		do {
+			next = scanner->Peek();
+		}while (next->kind==_basicIdentifier || next->kind==_extendedIdentifier || next->kind==_dot && next->kind!=_EOF);
+		return next->kind==_apostrophe && scanner->Peek()->kind==_lparen;
+	}
+
+	bool isComponentConfigurationInBlockConfiguration() {
+		scanner->ResetPeek();
+		Token * next;
+		do {
+			next = scanner->Peek();
+		}while (next->kind!=_colon && next->kind!=_lparen && next->kind!=_for && next->kind!=_EOF);
+		return next->kind==_colon;
+	}
+
+IGNORECASE
+CHARACTERS
+  	eol 			= '\r' + '\n' .//+ '\u000C'.
+
+  	digit = '0'..'9' .
+
+  	//A B C D E F G H I J K L M N O P Q R S T U V W X Y Z � � � � � � � � � � � � � � � � D . � � � � � � � � � � � � Y P '
+  	upperCaseLetter = 'A'..'Z' + '\u00c0'..'\u00d6' + '\u00d8' .. '\u00de'. //A - Z,� - �, � - �
+
+  	//a b c d e f g h i j k l m n o p q r s t u v w x y z � � � � � � � � � � � � � � � � �  � � � � � � � � � � � � y ' p �
+  	lowerCaseLetter = 'a'..'z' + '\u00df'..'\u00f6' + '\u00f8'.. '\u00ff'. //a-z,� - �, � - �
+
+  	specialCharacter = '#' + '&' + '\'' + '(' + ')' + '*' + '+' + ',' + '-'
+  		+ '.' + '/' + ':' + ';' + '<' + '=' + '>' + '[' + ']' + '_' + '|'.
+
+  	spaceCharacter = ' ' + '\u00a0'. //space, non-breaking space
+
+  	otherSpecialCharacter =  '!' + '$' + '%' + '@' + '?' + '^' + '`' + '{' + '}' + '~'
+		+ '\u00a1'..'\u00bf' + '\u00d7' + '\u00f7'.//  � - �, � - �
+
+  	letter = upperCaseLetter + lowerCaseLetter.
+
+  	graphicCharacter =
+  		upperCaseLetter
+  		+ digit
+  		+ specialCharacter
+  		+ spaceCharacter
+  		+ lowerCaseLetter
+  		+ otherSpecialCharacter
+  		.
+
+  	notApostrophe = ANY - "'".
+
+  	newline =  '\r' +'\n'.
+
+  	letterOrDigit =  letter + digit.
+
+  	extendedDigit = digit + letter.
+
+  	baseSpecifier = 'b' + 'o' + 'x'.
+
+TOKENS
+
+	basicIdentifier = letter { letterOrDigit | '_' }.
+
+	//extended identifiers can't contain a single backslash
+	extendedIdentifier = "\\" { "\"" | "\\\\" | graphicCharacter } "\\".
+
+	basedLiteral = digit { ['_'] digit } '#' extendedDigit { ['_'] extendedDigit } [ '.' extendedDigit { ['_'] extendedDigit } ] '#' ['e' [ '+' | '-' ] digit { ['_'] digit }].
+
+	integerLiteral = digit { ['_'] digit } ['e' [ '+' | '-' ] digit { ['_'] digit }].
+
+	realLiteral = digit { ['_'] digit } '.' digit { ['_'] digit }  ['e' [ '+' | '-' ] digit { ['_'] digit }] .
+
+	//string literals can't contain a single quotation mark
+	stringLiteral = "\"" { "\"\"" | "\\" | graphicCharacter } "\"".
+
+	bitStringLiteral = baseSpecifier '\"' [extendedDigit { ['_'] extendedDigit }] '\"'.
+
+	apostrophe = "'" CONTEXT (( letter | "(" ) notApostrophe).
+
+	characterLiteral = "'" ("\"" | "\\" | graphicCharacter) "'".
+
+  	abs="abs".
+	access="access".
+	after="after".
+	alias="alias".
+	all="all".
+	and="and".
+	architecture="architecture".
+	array="array".
+	assert="assert".
+	attribute="attribute".
+	begin="begin".
+	block="block".
+	body="body".
+	buffer="buffer".
+	bus="bus".
+	case="case".
+	component="component".
+	configuration="configuration".
+	constant="constant".
+	disconnect="disconnect".
+	downto="downto".
+	else="else".
+	elsif="elsif".
+	end="end".
+	entity="entity".
+	exit="exit".
+	file="file".
+	for="for".
+	function="function".
+	generate="generate".
+	generic="generic".
+	group="group".
+	guarded="guarded".
+	if="if".
+	impure="impure".
+	in="in".
+	inertial="inertial".
+	inout="inout".
+	is="is".
+	label="label".
+	library="library".
+	linkage="linkage".
+	literal="literal".
+	loop="loop".
+	map="map".
+	mod="mod".
+	nand="nand".
+	new="new".
+	next="next".
+	nor="nor".
+	not="not".
+	null="null".
+	of="of".
+	on="on".
+	open="open".
+	or="or".
+	others="others".
+	outToken="out".
+	package="package".
+	port="port".
+	postponed="postponed".
+	procedure="procedure".
+	process="process".
+	protected="protected".
+	pure="pure".
+	range="range".
+	record="record".
+	register="register".
+	reject="reject".
+	rem="rem".
+	report="report".
+	return="return".
+	rol="rol".
+	ror="ror".
+	select="select".
+	severity="severity".
+	shared="shared".
+	signal="signal".
+	sla="sla".
+	sll="sll".
+	sra="sra".
+	srl="srl".
+	subtype="subtype".
+	then="then".
+	to="to".
+	transport="transport".
+	type="type".
+	unaffected="unaffected".
+	units="units".
+	until="until".
+	use="use".
+	variable="variable".
+	wait="wait".
+	when="when".
+	while="while".
+	with="with".
+	xnor="xnor".
+	xor="xor".
+
+  	doublestar    = "**".
+  	leq           = "<=".
+  	geq           = ">=".
+  	arrow         = "=>".
+  	neq           = "/=".
+  	varAssign     = ":=".
+  	box           = "<>".
+  	semicolon     = ";".
+  	comma         = ",".
+  	ampersand     = "&".
+  	lparen        = "(".
+  	rparen        = ")".
+  	lbracket      = "[".
+  	rbracket      = "]".
+  	colon         = ":".
+  	mul           = "*".
+  	div           = "/".
+  	plus          = "+".
+  	minus         = "-".
+  	lt            = "<".
+ 	gt            = ">".
+  	eq            = "=".
+  	bar           = "|".
+  	dot           = ".".
+
+COMMENTS FROM "/*" TO "*/" NESTED
+//A comment can appear on any line of a VHDL description and may contain any character except the format effectors vertical tab, carriage return, line feed, and form feed.
+COMMENTS FROM "--" TO '\u000a' //line feed
+IGNORE '\t' + ' ' + newline
+
+PRODUCTIONS
+
+VHDL =
+    DesignUnit  { DesignUnit }
+    .
+
+DesignUnit =
+    {
+        LibraryClause
+        | UseClause
+    } 
+    LibraryUnit
+    .
+
+LibraryUnit =
+    (
+    EntityDeclaration
+    | ArchitectureBody
+    | IF(la->kind==_package && scanner->Peek()->kind==_body) PackageBody
+    | PackageDeclaration
+    | ConfigurationDeclaration
+    )
+    .
+
+LibraryClause = (. StrList libs; .)
+	library NamedIdentifierList<libs>  semicolon
+    .
+
+GenericClause =
+    generic lparen GenericInterfaceList rparen semicolon
+    .
+
+GenericInterfaceList =
+    InterfaceConstantDeclaration { semicolon InterfaceConstantDeclaration }
+    .
+
+PortClause =
+    port lparen PortInterfaceList rparen semicolon
+    .
+
+PortInterfaceList =
+    InterfaceSignalDeclarationProcedure { semicolon InterfaceSignalDeclarationProcedure }
+    .
+
+EntityDeclaration = (. std::string entity; .)
+    entity NamedIdentifier<entity> is (. mpDf->AddEntityDeclaration(entity); .)
+        [GenericClause]
+        [PortClause]
+        { EntityDeclarativeItem }
+    [begin
+        {
+            [IF(scanner->Peek()->kind==_colon) LabelColon] [postponed]
+            (
+            ConcurrentAssertionStatement
+            | ConcurrentProcedureCallStatement
+            | ProcessStatement
+            )
+        }
+    ]
+    end [entity] [Identifier] semicolon
+    .
+
+EntityDeclarativeItem =
+    SYNC
+    (
+    SubprogramDeclarationOrBody
+    | TypeDeclaration
+    | SubtypeDeclaration
+    | ConstantDeclaration
+    | SignalDeclaration
+    | VariableDeclaration
+    | FileDeclaration
+    | AliasDeclaration
+    | IF(isAttributeDeclaration()) AttributeDeclaration
+    | AttributeSpecification
+    | DisconnectionSpecification
+    | UseClause
+    | IF(isGroupTemplate()) GroupTemplateDeclaration
+    | GroupDeclaration
+    )
+    .
+
+ArchitectureBody = (. std::string arch, ent; .)
+    architecture NamedIdentifier<arch> of NamedSelectedName<ent> is (. mpDf->AddArchitectureDeclaration(ent, arch); .)
+        { BlockDeclarativeItem }
+    begin
+        ArchitectureStatementList
+    end [architecture] [Identifier] semicolon
+    .
+
+ConfigurationDeclarativeItem =
+    SYNC
+    (
+    UseClause
+    | GroupDeclaration
+    | AttributeSpecification
+    )
+    .
+
+ConfigurationDeclaration =
+    configuration Identifier of SelectedName is
+        { ConfigurationDeclarativeItem }
+        BlockConfiguration
+    end [configuration] [Identifier] semicolon
+    .
+
+BlockConfigurationIndex =
+    (
+    IF(isDiscreteRangeInBlockConfigurationIndex()) DiscreteRange 
+    | Expression 
+    )
+    .
+
+BlockSpecification  =
+    //could be a block_statement_label or generate_statement_label
+    (
+    IF(scanner->Peek()->kind==_lparen) Identifier [lparen BlockConfigurationIndex rparen]
+    | SelectedName 
+    )
+    .
+
+BlockConfiguration =
+    for BlockSpecification
+    { UseClause }
+    {
+        IF(isComponentConfigurationInBlockConfiguration()) ComponentConfiguration 
+        | BlockConfiguration 
+    }
+    end for semicolon
+    .
+
+ComponentConfiguration =
+    for ComponentSpecification
+        [BindingIndication semicolon]
+        [BlockConfiguration]
+    end for semicolon
+    .
+
+PackageDeclaration = (. std::string pkg; .)
+    package NamedIdentifier<pkg> is (. mpDf->AddPkgDeclaration(pkg); .)
+        { PackageDeclarativeItem }
+    end [package] [Identifier] semicolon
+    .
+
+PackageDeclarativeItem =
+    SYNC
+    (
+    SubprogramDeclaration
+    | TypeDeclaration
+    | SubtypeDeclaration
+    | ConstantDeclaration
+    | SignalDeclaration
+    | VariableDeclaration
+    | FileDeclaration
+    | AliasDeclaration
+    | ComponentDeclaration
+    | IF(isAttributeDeclaration()) AttributeDeclaration
+    | AttributeSpecification
+    | DisconnectionSpecification
+    | UseClause
+    | IF(isGroupTemplate()) GroupTemplateDeclaration
+    | GroupDeclaration
+    )
+    .
+
+PackageBody =
+    package body Identifier is
+        { PackageBodyDeclarativeItem }
+    end [package body] [Identifier] semicolon
+    .
+
+PackageBodyDeclarativeItem  =
+    SYNC
+    (
+    SubprogramDeclarationOrBody
+    | TypeDeclaration
+    | SubtypeDeclaration
+    | ConstantDeclaration
+    | SignalDeclaration
+    | VariableDeclaration
+    | FileDeclaration
+    | AliasDeclaration
+    | UseClause
+    | IF(isGroupTemplate()) GroupTemplateDeclaration
+    | GroupDeclaration
+    )
+    .
+
+Designator =
+    (
+    Identifier
+    | stringLiteral  //stringLiteral is a operator symbol
+    )
+    .
+
+SubprogramSpecification =
+    (
+    procedure Designator [lparen ParameterInterfaceListProcedure rparen]
+    | [pure | impure] function Designator [lparen ParameterInterfaceListFunction rparen] return TypeMark
+    )
+    .
+
+SubprogramDeclarationOrBody =
+    SubprogramSpecification [SubprogramBody] semicolon
+    .
+
+SubprogramDeclaration =
+	SubprogramSpecification semicolon
+    .
+
+SubprogramBody =
+    is
+        { SubprogramDeclarativeItem }
+    begin
+        SequentialStatementList
+    end [procedure | function] [Designator]
+    .
+
+SubprogramDeclarativeItem =
+    SYNC
+    (
+    SubprogramDeclarationOrBody
+    | TypeDeclaration
+    | SubtypeDeclaration
+    | ConstantDeclaration
+    | VariableDeclaration
+    | FileDeclaration
+    | AliasDeclaration
+    | IF(isAttributeDeclaration()) AttributeDeclaration
+    | AttributeSpecification
+    | UseClause
+    | IF(isGroupTemplate()) GroupTemplateDeclaration
+    | GroupDeclaration
+    )
+    .
+
+TypeDeclaration =
+    type Identifier (
+    is TypeDefinition semicolon
+    | semicolon 
+    )
+    .
+
+TypeDefinition =
+    (
+    EnumerationTypeDefinition
+    | IF(isPhysicalType()) PhysicalTypeDefinition
+    | IntegerOrFloatingPointTypeDefinition
+    | ArrayTypeDefinition
+    | RecordTypeDefinition
+    | AccessTypeDefinition
+    | FileTypeDefinition
+    | IF(la->kind==_protected && scanner->Peek()->kind==_body) ProtectedTypeBody
+    | ProtectedTypeDeclaration
+    )
+    .
+
+ConstantDeclaration  =
+    constant IdentifierList colon SubtypeIndication [varAssign Expression] semicolon
+    .
+
+SignalDeclaration =
+    signal IdentifierList colon SubtypeIndication [register | bus] [varAssign Expression] semicolon
+    .
+
+VariableDeclaration =
+    [shared] variable IdentifierList colon SubtypeIndication [varAssign Expression] semicolon
+    .
+
+FileDeclaration =
+    file IdentifierList colon SubtypeIndication [[open Expression] is Expression] semicolon
+    .
+
+AliasDeclaration =
+    alias AliasDesignator [colon SubtypeIndication] is Name [Signature] semicolon
+    .
+
+AliasDesignator =
+    (
+    Identifier
+    | characterLiteral
+    | stringLiteral
+    )
+    .
+
+ComponentDeclaration =
+    component Identifier [is]
+        [GenericClause]
+        [PortClause]
+    end component [Identifier] semicolon
+    .
+
+AttributeDeclaration =
+    attribute Identifier colon TypeMark semicolon
+    .
+
+AttributeSpecification =
+    attribute Identifier of EntityNameList colon EntityClass is Expression semicolon
+    .
+
+EntityDesignator =
+    (
+    Identifier
+    | characterLiteral
+    | stringLiteral
+    )
+    [Signature]
+    .
+
+EntityNameList =
+    (
+    EntityDesignator { comma EntityDesignator }
+    | others 
+    | all 
+    )
+    .
+
+EntityClass =
+    (
+    entity 
+    | architecture 
+    | configuration 
+    | package 
+    | procedure 
+    | function 
+    | type 
+    | subtype 
+    | constant 
+    | signal 
+    | variable 
+    | file 
+    | component 
+    | label 
+    | literal 
+    | units 
+    | group 
+    )
+    .
+
+ConfigurationSpecification =
+    for ComponentSpecification
+        BindingIndication semicolon
+    .
+
+InstantiationList =
+    (
+    IdentifierList 
+    | others 
+    | all 
+    )
+    .
+
+ComponentSpecification =
+    InstantiationList colon SelectedName
+    .
+
+EntityAspect =
+    entity SelectedName [lparen Identifier rparen]
+    | configuration  SelectedName
+    | open
+    .
+
+BindingIndication =
+    [use EntityAspect]
+    [GenericMapAspect]
+    [PortMapAspect]
+    .
+
+DisconnectionSpecification =
+    disconnect (SelectedNameList | others | all) colon TypeMark after Expression semicolon
+    .
+
+EntityClassEntry =
+    EntityClass [box]
+    .
+
+GroupTemplateDeclaration =
+    group Identifier is lparen EntityClassEntry { comma EntityClassEntry } rparen semicolon
+    .
+
+GroupDeclaration =
+    group Identifier colon SelectedName lparen GroupConstituentList rparen semicolon
+    .
+
+GroupConstituent =
+	(
+    Name 
+    | characterLiteral 
+    )
+    .
+
+GroupConstituentList =
+    GroupConstituent { comma GroupConstituent }
+    .
+
+UseClause = (. StrList selNames; .)
+    use NamedSelectedNameList<selNames> semicolon
+     (. for(auto name: selNames) mpDf->AddPkgUse(name); .)
+    .
+
+EnumerationLiteral =
+    (
+    Identifier
+    | characterLiteral 
+    )
+    .
+
+EnumerationTypeDefinition =
+    lparen EnumerationLiteral { comma EnumerationLiteral } rparen
+    .
+
+IntegerOrFloatingPointTypeDefinition =
+    range Range
+    .
+
+PhysicalTypeDefinition =
+    range Range
+    units
+        Identifier semicolon
+        { Identifier eq PhysicalLiteral semicolon }
+    end units [Identifier]
+    .
+
+IndexSubtypeDefinition =
+    TypeMark range box
+    .
+
+ArrayTypeDefinition =
+    array (
+    IF(isIndexSubtypeDefinition()) lparen IndexSubtypeDefinition { comma IndexSubtypeDefinition } rparen of SubtypeIndication
+    | IndexConstraint of SubtypeIndication
+    )
+    .
+
+RecordTypeDefinition =
+    record
+        IdentifierList colon SubtypeIndication semicolon
+        { IdentifierList colon SubtypeIndication semicolon }
+    end record [Identifier]
+    .
+
+AccessTypeDefinition =
+    access SubtypeIndication
+    .
+
+FileTypeDefinition =
+    file of TypeMark
+    .
+
+ProtectedTypeDeclaration =
+    protected
+        { ProtectedTypeDeclarativeItem }
+    end protected [Identifier]
+    .
+
+ProtectedTypeDeclarativeItem =
+    SYNC
+    (
+    SubprogramDeclaration
+    | AttributeSpecification
+    | UseClause
+    )
+    .
+
+ProtectedTypeBody =
+    protected body
+        { ProtectedTypeBodyDeclarativeItem }
+    end protected body [Identifier]
+    .
+
+ProtectedTypeBodyDeclarativeItem =
+    SYNC
+    (
+    SubprogramDeclarationOrBody
+    | TypeDeclaration
+    | SubtypeDeclaration
+    | ConstantDeclaration
+    | VariableDeclaration
+    | FileDeclaration
+    | AliasDeclaration
+    | IF(isAttributeDeclaration()) AttributeDeclaration
+    | AttributeSpecification
+    | UseClause
+    | IF(isGroupTemplate()) GroupTemplateDeclaration
+    | GroupDeclaration
+    )
+    .
+
+SubtypeDeclaration =
+    subtype Identifier is SubtypeIndication semicolon
+    .
+
+SubtypeIndication =
+    SelectedName [SelectedName] [Constraint]
+    .
+
+Direction =
+    (
+    to 
+    | downto 
+    )
+    .
+
+RangeConstraint =
+    range Range
+    .
+
+IndexConstraint =
+    lparen DiscreteRange { comma  DiscreteRange } rparen
+    .
+
+Range =
+    (
+    IF(isNotNameInRange()) SimpleExpression Direction SimpleExpression
+    | Name 
+    )
+    .
+
+Constraint =
+    (
+    RangeConstraint 
+    | IndexConstraint 
+    )
+    .
+
+DiscreteRange =
+    (
+    IF(isSubtypeIndicationInDiscreteRange()) SubtypeIndication 
+    | Range 
+    )
+    .
+
+TypeMark =
+    SelectedName // could be type_name or subtype_name;
+    .
+
+ArchitectureStatementList =
+    { ArchitectureStatement }
+    .
+
+ArchitectureStatement =
+    (
+    IF(scanner->Peek()->kind==_colon) LabelColon (
+        IF(isArchitectureStatementWithLabel()) ArchitectureStatementWithLabel
+        | ArchitectureStatementOptionalLabel
+        )
+    | ArchitectureStatementOptionalLabel
+    )
+    .
+
+ArchitectureStatementWithLabel =
+    (
+    ComponentInstantiationStatement
+    | BlockStatement
+    | GenerateStatement
+    )
+    .
+
+ArchitectureStatementOptionalLabel =
+    [postponed]
+    (
+    ProcessStatement
+    | ConcurrentAssertionStatement
+    | IF(isConcurrentSignalAssignmentStatement()) ConcurrentSignalAssignmentStatement
+    | ConcurrentProcedureCallStatement
+    )
+    .
+
+GenericMapAspect =
+    generic map lparen AssociationList rparen
+    .
+
+PortMapAspect =
+    port map lparen AssociationList rparen
+    .
+
+BlockStatement =
+    block [lparen Expression rparen] [is]
+        [GenericClause [GenericMapAspect semicolon]]
+        [PortClause [PortMapAspect semicolon]]
+        { BlockDeclarativeItem }
+    begin
+        ArchitectureStatementList
+    end block [Identifier] semicolon
+    .
+
+BlockDeclarativeItem  =
+    SYNC
+    (
+    SubprogramDeclarationOrBody
+    | TypeDeclaration
+    | SubtypeDeclaration
+    | ConstantDeclaration
+    | SignalDeclaration
+    | VariableDeclaration
+    | FileDeclaration
+    | AliasDeclaration
+    | ComponentDeclaration
+    | IF(isAttributeDeclaration()) AttributeDeclaration
+    | AttributeSpecification
+    | ConfigurationSpecification
+    | DisconnectionSpecification
+    | UseClause
+    | IF(isGroupTemplate()) GroupTemplateDeclaration
+    | GroupDeclaration
+    )
+    .
+
+ProcessStatement =
+    process [lparen NameList rparen] [is]
+        { ProcessDeclarativeItem }
+    begin
+        SequentialStatementList
+    end [postponed] process [Identifier] semicolon
+    .
+
+ProcessDeclarativeItem  =
+    SYNC
+    (
+    SubprogramDeclarationOrBody
+    | TypeDeclaration
+    | SubtypeDeclaration
+    | ConstantDeclaration
+    | VariableDeclaration
+    | FileDeclaration
+    | AliasDeclaration
+    | UseClause
+    | IF(isAttributeDeclaration()) AttributeDeclaration
+    | AttributeSpecification
+    | IF(isGroupTemplate()) GroupTemplateDeclaration
+    | GroupDeclaration
+    )
+    .
+
+ConcurrentProcedureCallStatement =
+    SelectedName [lparen AssociationList rparen] semicolon
+    .
+
+ConcurrentAssertionStatement =
+    assert Condition [report Expression] [severity Expression] semicolon
+    .
+
+ConcurrentSignalAssignmentStatement =
+    (
+    ConditionalSignalAssignment
+    | SelectedSignalAssignment
+    )
+    .
+
+ConditionalSignalAssignment =
+    Target leq [guarded] [DelayMechanism]
+        ConditionalWaveforms
+        semicolon
+    .
+
+ConditionalWaveforms =
+    Waveform [when Condition [else ConditionalWaveforms]] 
+    .
+
+SelectedWaveform =
+    Waveform when Choices 
+    .
+
+SelectedSignalAssignment =
+    with Expression select
+        Target leq [guarded] [DelayMechanism]
+        SelectedWaveform { comma SelectedWaveform } semicolon
+    .
+
+Target =
+    (
+    Name 
+    | Aggregate 
+    )
+    .
+
+ComponentInstantiationStatement = (. std::string ent, arch; .)
+    ( 
+    [component] SelectedName 
+    | entity NamedSelectedName<ent> [lparen NamedIdentifier<arch> rparen] (. mpDf->AddInstantiation(ent, arch); .)
+    | configuration SelectedName 
+    )
+    [GenericMapAspect]
+    [PortMapAspect] semicolon
+    .
+
+GenerateStatement =
+    (
+    ForGenerateStatement
+    | IfGenerateStatement
+    )
+    .
+
+ForGenerateStatement =
+    for Identifier in DiscreteRange generate
+        GenerateStatementBody
+    end generate [Identifier] semicolon
+    .
+
+IfGenerateStatement =
+    if Condition generate
+        GenerateStatementBody
+    end generate [Identifier] semicolon
+    .
+
+GenerateStatementBody =
+    [{ BlockDeclarativeItem }
+    begin]
+    ArchitectureStatementList
+    .
+
+SequentialStatementList =
+    { SequentialStatement }
+    .
+
+SequentialStatement =
+    (
+    [IF(scanner->Peek()->kind==_colon) LabelColon] SYNC
+    (
+    WaitStatement
+    | AssertionStatement
+    | ReportStatement
+    | IfStatement
+    | CaseStatement
+    | LoopStatement
+    | NextStatement
+    | ExitStatement
+    | ReturnStatement
+    | NullStatement
+    | IF(isAssignmentStatement()) SignalOrVariableAssignmentStatement
+    | ProcedureCallStatement
+    )
+    )
+    .
+
+WaitStatement =
+    wait [on NameList] [until Condition] [for Expression] semicolon
+    .
+
+AssertionStatement =
+    assert Condition [report Expression] [severity Expression] semicolon
+    .
+
+ReportStatement =
+    report Expression [severity Expression] semicolon
+    .
+
+SignalOrVariableAssignmentStatement =
+    Target
+    (
+        SignalAssignmentStatement
+        | VariableAssignmentStatement
+    )
+    .
+
+VariableAssignmentStatement =
+    varAssign Expression semicolon
+    .
+
+SignalAssignmentStatement =
+    leq [DelayMechanism] Waveform semicolon
+    .
+
+DelayMechanism =
+    (
+    transport
+    | [reject Expression] inertial
+    )
+    .
+
+WaveformElement =
+ 	Expression [after Expression]
+    .
+
+Waveform =
+    (
+    WaveformElement { comma WaveformElement }
+    | unaffected
+    )
+    .
+
+ProcedureCallStatement =
+    SelectedName [lparen AssociationList rparen] semicolon
+    .
+
+IfStatement =
+    if Condition then
+        SequentialStatementList 
+    {elsif Condition then
+         SequentialStatementList}
+    [else
+        SequentialStatementList]
+    end if [Identifier] semicolon
+    .
+
+CaseStatement =
+    case Expression is
+        when Choices arrow SequentialStatementList 
+        { when Choices arrow SequentialStatementList }
+    end case [Identifier] semicolon
+    .
+
+IterationScheme =
+    (
+    while Condition 
+    | for Identifier in DiscreteRange 
+    )
+    .
+
+LoopStatement =
+    [IterationScheme] loop
+        SequentialStatementList
+    end loop [Identifier] semicolon
+    .
+
+NextStatement =
+    next [Identifier] [when Condition] semicolon
+    .
+
+ExitStatement =
+    exit [Identifier] [when Condition] semicolon
+    .
+
+ReturnStatement =
+    return [Expression] semicolon
+    .
+
+NullStatement =
+    null semicolon
+    .
+
+InterfaceElementProcedure =
+    (
+    IF(isInterfaceConstantDeclaration()) InterfaceConstantDeclaration
+    | IF(isInterfaceVariableDeclaration()) InterfaceVariableDeclaration
+    | InterfaceSignalDeclarationProcedure
+    | InterfaceFileDeclaration
+    )
+    .
+
+InterfaceElementFunction =
+    (
+    InterfaceConstantDeclaration
+    | InterfaceSignalDeclarationFunction
+    | InterfaceFileDeclaration
+    )
+    .
+
+ParameterInterfaceListProcedure =
+    InterfaceElementProcedure { semicolon InterfaceElementProcedure }
+    .
+
+ParameterInterfaceListFunction =
+    InterfaceElementFunction { semicolon InterfaceElementFunction }
+    .
+
+InterfaceConstantDeclaration =
+    [constant] IdentifierList colon [in] SubtypeIndication [varAssign Expression]
+    .
+
+InterfaceSignalDeclarationProcedure =
+    [signal] IdentifierList colon [InterfaceMode] SubtypeIndication [bus] [varAssign Expression]
+    .
+
+InterfaceSignalDeclarationFunction =
+    signal IdentifierList colon [in] SubtypeIndication [bus] [varAssign Expression]
+    .
+
+InterfaceVariableDeclaration =
+    [variable] IdentifierList colon [InterfaceMode] SubtypeIndication [varAssign Expression]
+    .
+
+InterfaceMode =
+    (
+    in 
+    | outToken 
+    | inout 
+    | buffer 
+    | linkage 
+    )
+    .
+
+InterfaceFileDeclaration =
+    file IdentifierList colon SubtypeIndication
+    .
+
+AssociationElement =
+    [IF(isFormalPartInAssociationElement()) FormalPart arrow] ActualPart 
+    .
+
+AssociationList =
+    AssociationElement { comma AssociationElement }
+    .
+
+FormalPart =
+    Name
+    .
+
+ActualPart =
+    (
+    Expression
+    | open
+    )
+    .
+
+Condition =
+    Expression
+    .
+
+Expression =
+    Relation
+    { LogicalOperator Relation }
+    .
+
+LogicalOperator =
+    (
+    and 
+    | or 
+    | xor 
+    | xnor 
+    | nand 
+    | nor 
+    )
+    .
+
+Relation =
+    ShiftExpression
+    [RelationalOperator ShiftExpression]
+    .
+
+RelationalOperator =
+    (
+    eq 
+    | neq 
+    | lt 
+    | leq 
+    | gt 
+    | geq 
+    )
+    .
+
+ShiftExpression =
+    SimpleExpression
+    [ShiftOperator SimpleExpression]
+    .
+
+ShiftOperator =
+    (
+    sll  
+    | srl 
+    | sla 
+    | sra 
+    | rol 
+    | ror 
+    )
+    .
+
+SimpleExpression =
+    [Sign] Term
+    { AddingOperator Term }
+    .
+
+Sign =
+    (
+    plus 
+    | minus 
+    )
+    .
+
+AddingOperator =
+    (
+    plus 
+    | minus 
+    | ampersand 
+    )
+    .
+
+MultiplyingOperator=
+    (
+    mul 
+    | div 
+    | mod 
+    | rem 
+    )
+    .
+
+Term =
+    Factor
+    { MultiplyingOperator Factor }
+    .
+
+Factor =
+	(
+	Primary [doublestar Primary]
+	| abs  Primary 
+	| not  Primary 
+	)
+    .
+
+Primary =
+	(
+    IF(isQualifiedExpression()) SelectedName QualifiedExpression
+    | Name 
+    | Literal
+    | Allocator
+    | Aggregate 
+    )
+    .
+
+Allocator =
+	new SelectedName
+	 	(
+	 	QualifiedExpression
+	 	| [IndexConstraint]
+	 	)
+    .
+
+QualifiedExpression =
+    apostrophe Aggregate
+    .
+
+SelectedNameList =
+    SelectedName { comma SelectedName }
+    .
+
+NamedSelectedNameList<StrList & l> = (. std::string name;.)
+    NamedSelectedName<name> (. l.push_back(name); .)
+    { comma NamedSelectedName<name> (. l.push_back(name); .) }
+    .
+
+SelectedName =
+    Prefix { SelectedPart }
+    .
+
+NamedSelectedName<std::string & n> = (. std::string s; .)
+    NamedPrefix<n>
+    { NamedSelectedPart<s> (. n+= s; .) }
+    .
+
+NameList =
+    Name { comma Name }
+    .
+
+Name =
+    Prefix { NamePart }
+    .
+
+Prefix =
+	(
+ 	Identifier
+ 	| stringLiteral 
+ 	)
+    .
+
+NamedPrefix<std::string & s> =
+	(
+ 	NamedIdentifier<s>
+ 	| stringLiteral (. s = CurrentToken(); .)
+ 	)
+    .
+
+NamePart =
+    (
+    SelectedPart
+    | AttributePart
+    | IF(isSlicePart()) SlicePart
+    | AssociationListPart
+    )
+    .
+
+SelectedPart =
+    dot (
+    Identifier
+    | characterLiteral 
+    | stringLiteral
+    | all
+    )
+    .
+
+NamedSelectedPart<std::string & n> = (. n = "."; std::string s; .)
+    dot (                     
+    NamedIdentifier<s>                (.  n += s; .)
+    | characterLiteral        (.  n += CurrentToken(); .)
+    | stringLiteral           (.  n += CurrentToken(); .)
+    | all                     (. n += CurrentToken(); .)
+    )
+   .
+
+AssociationListPart =
+    lparen AssociationList rparen
+    .
+
+SlicePart =
+    lparen DiscreteRange rparen  
+    .
+
+AttributePart =
+    [Signature] apostrophe (Identifier | range) [lparen Expression rparen]
+    .
+
+Signature =
+    lbracket [SelectedNameList] [return TypeMark] rbracket
+    .
+
+Literal =
+    (
+    realLiteral 
+    | integerLiteral 
+    | basedLiteral 
+    | characterLiteral 
+    | bitStringLiteral 
+    | null 
+    )
+    [IF((t->kind==_integerLiteral || t->kind==_realLiteral) && (la->kind==_basicIdentifier || la->kind==_extendedIdentifier)) Identifier]
+    .
+
+PhysicalLiteral =
+    (
+    integerLiteral 
+    | realLiteral 
+    )
+    Identifier
+    .
+
+ElementAssociation =
+    [IF(isChoiceInElementAssociation()) Choices arrow] Expression
+    .
+
+Aggregate =
+    lparen ElementAssociation { comma ElementAssociation } rparen
+    .
+
+Choice =
+    (
+    IF(isRangeInChoice()) DiscreteRange 
+    | SimpleExpression 
+    | others 
+    )
+    .
+
+Choices =
+    Choice { bar Choice }
+    .
+
+IdentifierList =
+    Identifier
+    { comma Identifier }
+    .
+
+NamedIdentifierList<StrList & l> =
+    Identifier  (. l = StrList(); l.push_back(CurrentToken()); .)
+    { comma Identifier (. l.push_back(CurrentToken()); .) } 
+    .
+
+Identifier =
+    (
+    basicIdentifier 
+    | extendedIdentifier 
+    )
+    .
+
+NamedIdentifier<std::string & s> =
+    (
+    basicIdentifier        
+    | extendedIdentifier 
+    )      (. s = CurrentToken(); .)
+    .
+
+LabelColon =
+    Identifier colon
+    .
+
+END VHDL.

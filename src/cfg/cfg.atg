@@ -1,0 +1,86 @@
+#include <iostream>
+#include "../ConfigFile.h"
+#include "../Utility.h"
+
+COMPILER CFG
+         
+
+/** 
+ * Returns the current token as std::string
+ * 
+ * @return Current token
+ */           
+    std::string CurrentToken() const {
+        char * cstr = coco_string_create_char(t->val);
+        std::string str(cstr);
+        coco_string_delete(cstr);
+        return str;
+    }
+    void Print(std::string const & str) {
+        std::cout << str << std::endl;
+    }      
+    void Parse(ConfigFile * cfg) {
+    
+         mpCfg = cfg;
+         if(mpCfg) {
+             Parse();
+         }
+    }
+    
+    private:
+        ConfigFile * mpCfg;
+    public:
+	
+CHARACTERS
+  letter = 'a' .. 'z' + 'A' .. 'Z' + '_'.
+  digit = '0' .. '9'.
+  cr = '\r' .
+  lf = '\n' .
+  tab = '\t' .
+
+  anychar = ANY - lf.
+    
+TOKENS
+  minus = '-'.
+  plus = '+'.
+  colon = ':'.
+  ident   = letter  {letter | digit | '.' | '/'}.
+  number = digit {digit}.
+
+  special = '#' | '&' | '(' | ')' | '*' | ',' | '|' | ':' 
+            ';' | '<' | '>' | '[' | ']' | '\\'.
+
+  newline =  cr | lf.
+  valString = '=' {anychar} '\n'.
+
+
+COMMENTS FROM '#' TO lf
+
+IGNORE tab
+
+PRODUCTIONS
+
+CFG =  Command { Command | newline }.
+
+Command = LibIgnore | LibDef | VarDef
+        .
+
+LibIgnore =                          (. std::string lib; .)
+          '-' Ident<lib> newline     (. mpCfg->AddSysLib(lib); .) 
+          .
+
+LibDef =                          (. std::string lib, src; util::StrList sources; .)
+      '+' Ident<lib> ':'
+       { Ident<src>          (. sources.push_back(src); .) }
+         newline                 (. mpCfg->AddLibrary(lib, sources); .)
+          .
+
+VarDef =                          (. std::string i, v, p; .)
+       Ident<i> 
+       valString                     (. std::string s = CurrentToken(); mpCfg->AddVariable(i, util::Trim(s.substr(1))); .)
+       .
+
+Ident<std::string & s> = ident (. s = CurrentToken(); .).
+
+
+END CFG.
