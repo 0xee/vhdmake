@@ -151,7 +151,7 @@ string MakefileGen::GenerateRule(DesignFile const & df) {
 
 
     rule += "\n\tcd " + libPathWithSep + "; " + mCfg->GetCompileCommand() + " " +
-        libPathWithSep + df.GetTargetLib() + " " + df.GetName() + "\n";
+        df.GetTargetLib() + " " + df.GetName() + "\n";
     rule += "\ttouch " + df.GetName() + ".done\n"; 
     return rule + "\n";
 }
