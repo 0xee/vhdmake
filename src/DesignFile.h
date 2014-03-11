@@ -33,21 +33,6 @@
 
 
 class DesignFile {
-    struct Ast {
-        std::string toString() {
-            return "blubb";
-        }
-        Ast *  getFirstChild() {
-            return this;
-        }
-        Ast *  getNextSibling() {
-            return this;
-        }
-        int getNumberOfChildren() {
-            return 0;
-        }
-    };
-    typedef Ast* AstNode;
 public:
     typedef std::shared_ptr<DesignFile> Ptr;
 
@@ -76,8 +61,6 @@ public:
     void AddArchitectureDeclaration(std::string const & entity, std::string const & arch);
     void AddPkgDeclaration(std::string const & name);
 private:
-
-    AstNode NodeAtPath(AstNode parent, std::vector<int> const & path);
 
     std::string mName, mTargetLib;
     std::list<std::string> mUses, mDeclarations;

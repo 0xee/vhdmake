@@ -63,6 +63,10 @@ public:
         return mVariables["VLIB"];
     }
 
+    inline std::string const & GetLibPath() {
+        return mVariables["LIBS"];
+    }
+
     inline std::string const & GetRmCommand() {
         return mVariables["RM"];
     }

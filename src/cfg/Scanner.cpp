@@ -452,9 +452,11 @@ void Scanner::Init() {
 	maxT = 9;
 	noSym = 9;
 	int i;
+	for (i = 46; i <= 47; ++i) start.set(i, 3);
 	for (i = 65; i <= 90; ++i) start.set(i, 3);
 	for (i = 95; i <= 95; ++i) start.set(i, 3);
 	for (i = 97; i <= 122; ++i) start.set(i, 3);
+	for (i = 126; i <= 126; ++i) start.set(i, 3);
 	for (i = 48; i <= 57; ++i) start.set(i, 4);
 	for (i = 10; i <= 10; ++i) start.set(i, 6);
 	for (i = 13; i <= 13; ++i) start.set(i, 6);

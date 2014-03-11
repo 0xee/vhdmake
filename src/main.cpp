@@ -56,8 +56,8 @@ void DisplayUsage() {
          << "          <VCOM> <targetlib> <hdlfile>" << endl
          << "    VLIB: Command to create library. (Default: \"vlib\")" << endl
          << "    RM:   File/directory delete command. (Default: \"rm -rf\")" << endl
-
-    << endl;
+         << "    LIBS: Target path for compiled libraries, eg. /tmp/libs (Default: \".\")" << endl
+         << endl;
     
 }
 

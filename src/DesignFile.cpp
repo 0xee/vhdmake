@@ -30,7 +30,9 @@
 using namespace std;
 using namespace util;
 
-DesignFile::DesignFile(std::string const & source, std::string const & targetLib) : mName(source), mTargetLib(targetLib) {
+DesignFile::DesignFile(std::string const & source, std::string const & targetLib) : mTargetLib(targetLib) {
+
+    mName = util::GetAbsolutePath(source);
     std::ifstream input(mName);
     if (!input)
     {

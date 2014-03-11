@@ -52,13 +52,18 @@ string MakefileGen::Generate() {
     string defaultRule = "all: Makefile \\\n\t\t";
     string selfRule = "Makefile: " + mCfg->GetPath() + 
         "\n\t" + mExePath + " " + mCfg->GetPath();
+
+    string libPath = mCfg->GetLibPath();
+    string libPathWithSep = libPath.size() ? libPath + '/' : "";
+
+    string libPathRule = libPath + ": \n\tmkdir -p " + libPath + "\n\t" + mCfg->GetLibCommand() + " " + libPath + "/work";
     string libRules;
     string fileRules;
     string targets;
     try {
         for(auto const & l : mLibMap) {
-            libRules += l.first + ":\n\t" + mCfg->GetLibCommand() + " " + l.first + "\n\n";
-            targets += l.first + " ";
+            libRules += libPathWithSep + l.first + ": " + libPath + "\n\t" + mCfg->GetLibCommand() + " " + libPathWithSep + l.first + "\n\n";
+            targets += libPathWithSep + l.first + " ";
             auto const & files = l.second;
             
             for(auto const & f : files) {
@@ -76,6 +81,7 @@ string MakefileGen::Generate() {
     string makefile = "# generated " + util::Trim(ctime(&now)) + " by vhdmake\n\n";
     makefile += defaultRule + "\n\n";
     makefile += selfRule + "\n\n";
+    makefile += libPathRule + "\n\n";    
     makefile += libRules + "\n\n";
     makefile += fileRules + "\n\n";
 
@@ -136,12 +142,16 @@ StrList MakefileGen::GetDependencies(DesignFile const & df) {
 
 string MakefileGen::GenerateRule(DesignFile const & df) {
     auto deps = GetDependencies(df);
-    string rule = df.GetName() + ".done: " + df.GetTargetLib() + " " + df.GetName() + " ";
+    string rule = df.GetName() + ".done: " + mCfg->GetLibPath() + '/' + df.GetTargetLib() + " " + df.GetName() + " ";
     for(auto & s : deps) {
         rule += s + ".done ";
     }
-    rule += "\n\t" + mCfg->GetCompileCommand() + " ./" + 
-        df.GetTargetLib() + " " + df.GetName() + "\n";
+
+    string libPathWithSep = mCfg->GetLibPath().size() ? mCfg->GetLibPath() + '/' : "";
+
+
+    rule += "\n\tcd " + libPathWithSep + "; " + mCfg->GetCompileCommand() + " " +
+        libPathWithSep + df.GetTargetLib() + " " + df.GetName() + "\n";
     rule += "\ttouch " + df.GetName() + ".done\n"; 
     return rule + "\n";
 }
