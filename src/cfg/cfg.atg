@@ -44,7 +44,7 @@ TOKENS
   minus = '-'.
   plus = '+'.
   colon = ':'.
-  ident   = (letter | '.' | '/' | '~') {letter | digit | '.' | '/'}.
+  ident   = (letter | '.' | '/' | '~') {letter | digit | '.' | '/' | '-' | '+'}.
   number = digit {digit}.
 
   special = '#' | '&' | '(' | ')' | '*' | ',' | '|' | ':' 

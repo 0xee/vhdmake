@@ -628,7 +628,7 @@ Token* Scanner::NextToken() {
 		case 3:
 			case_3:
 			recEnd = pos; recKind = 4;
-			if ((ch >= L'.' && ch <= L'9') || (ch >= L'A' && ch <= L'Z') || ch == L'_' || (ch >= L'a' && ch <= L'z')) {AddCh(); goto case_3;}
+			if (ch == L'+' || (ch >= L'-' && ch <= L'9') || (ch >= L'A' && ch <= L'Z') || ch == L'_' || (ch >= L'a' && ch <= L'z')) {AddCh(); goto case_3;}
 			else {t->kind = 4; break;}
 		case 4:
 			case_4:

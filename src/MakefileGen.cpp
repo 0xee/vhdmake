@@ -58,14 +58,18 @@ string MakefileGen::Generate() {
 
     string libPathRule = libPath + ": \n\tmkdir -p " + libPath + "\n\t" + mCfg->GetLibCommand() + " " + libPath + "/work";
     string libRules;
+    string allLibsRule = libPath + "/libs.done: ";
+
     string fileRules;
     string targets;
     try {
         for(auto const & l : mLibMap) {
-            libRules += libPathWithSep + l.first + ": " + libPath + "\n\t" + mCfg->GetLibCommand() + " " + libPathWithSep + l.first + "\n\n";
+            libRules += libPathWithSep + l.first + ": " + libPath + "\n\t"
+                + mCfg->GetLibCommand() + " " + libPathWithSep + l.first + "\n" 
+                + "\tvmap " + l.first + " " + mCfg->GetLibPath() + '/' + l.first + "\n\n";
             targets += libPathWithSep + l.first + " ";
+            allLibsRule += libPathWithSep + l.first + " ";
             auto const & files = l.second;
-            
             for(auto const & f : files) {
                 
                 defaultRule += f.GetName() + ".done \\\n\t\t";
@@ -77,19 +81,110 @@ string MakefileGen::Generate() {
         cout << "Error generating makefile: " << e.what() << endl;
         return string();
     }
-    time_t now = time(0);
-    string makefile = "# generated " + util::Trim(ctime(&now)) + " by vhdmake\n\n";
+
+    
+    string simRule = "sim:\n";
+
+    for(auto & dir : mCfg->GetSourceDirs()) {
+        if(dir == "." || dir.empty()) continue;
+        simRule += "\tmake -C " + dir + " sim\n";
+    }
+
+    string makefile = GenerateHeader();
+
     makefile += defaultRule + "\n\n";
     makefile += selfRule + "\n\n";
     makefile += libPathRule + "\n\n";    
+    makefile += allLibsRule + "\n\n";
     makefile += libRules + "\n\n";
     makefile += fileRules + "\n\n";
-
+    makefile += simRule + "\n\n";
     makefile += "clean:\n";    
     makefile += "\t" + mCfg->GetRmCommand() + " " + targets + 
         "\n\n.PHONY: clean\n"; 
-    
+        
     return makefile;
+}
+
+string MakefileGen::GenerateSimScript() const {
+    string sim = GenerateHeader();
+
+    for(auto l : mLibMap) {
+        sim += "vmap " + l.first + " " + util::GetAbsolutePath(mCfg->GetLibPath()) + '/' + l.first + "\n";      
+    }
+
+    
+    sim += "\nonbreak { resume }\n"           \
+        "do sim.do\n"                         \
+        "\n"                                  \
+        "quit";
+    
+    return sim;    
+}
+
+string MakefileGen::GenerateGuiSimScript() const {
+    string sim = GenerateHeader();
+
+    sim += "\n\nproc com {} { exec make com }\n" \
+        "proc rerun {} { restart; run -all }\n\n";
+
+
+    for(auto l : mLibMap) {
+        sim += "vmap " + l.first + " " + mCfg->GetLibPath() + '/' + l.first + "\n";      
+    }
+
+    sim +=         "if { [file exists wave.do] == 1} {\n"   \
+        "    do wave.do\n"                        \
+        "}\n\n"                                        \
+        "do sim.do\n";
+
+    return sim;
+}
+
+std::string MakefileGen::GenerateHelper(string const & dir) const {
+    string relativeBaseDir =  util::GetRelativePathTo(dir, util::Pwd());
+
+    util::StrList depSrc;
+    auto filesInDir = util::GetFileNames(dir);
+    for(auto & file : filesInDir) {
+
+    }
+
+    string helper =
+        "VHD_SRC = $(wildcard *.vhd *.vhdl)\n"                          \
+        "TARGETS = $(patsubst %, %.done, $(VHD_SRC))\n"                 \
+        "BASE_DIR = " + relativeBaseDir + "\n"                          \
+        "THIS_DIR = " + dir +"\n"                                       \
+        "\n"                                                            \
+        "com: $(TARGETS)\n\n"                                           \
+        "sim: $(TARGETS)\n"                                             \
+        "	@if [ -a ./sim.do ]; then \\\n"                             \
+        "	  ! vsim -c -do $(BASE_DIR)/sim.do | grep -i \"failure\";\\\n" \
+        "   else \\\n"                                                  \
+        "     echo -n \"no sim script for\"; pwd; \\\n"                 \
+        "	fi;\n"                                                      \
+        "\n"                                                            \
+        "sim_gui: $(TARGETS)\n"                                         \
+        "	@if [ -a ./sim.do ]; then \\\n"                             \
+        "	  vsim -do $(BASE_DIR)/sim_gui.do; \\\n"                     \
+        "   else \\\n"                                                  \
+        "     echo -n \"no gui sim script for\"; pwd; \\\n"             \
+        "	fi;\n"                                                      \
+        "\n"                                                            \
+        "$(TARGETS):\n"                                                 \
+        "	make  -C $(BASE_DIR) $(THIS_DIR)/$@\n"                      \
+        "\n"                                                            \
+        "clean:\n"                                                      \
+        "	make -C $(BASE_DIR) clean\n"                                \
+        "\n"                                                            \
+        ".PHONY: clean $(TARGETS)\n";
+                
+    return helper;
+}
+
+string MakefileGen::GenerateHeader() const {
+    time_t now = time(0);
+    return "# generated " + util::Trim(ctime(&now)) + " by vhdmake\n\n";
 }
 
 void MakefileGen::DepErr(DesignFile const & df, std::string const & obj) {
@@ -104,6 +199,11 @@ StrList MakefileGen::GetDependencies(DesignFile const & df) {
         auto libBegin = o.find(':');
         auto libEnd = o.find(':', libBegin+1);
         string lib = o.substr(libBegin+1, libEnd-libBegin-1);
+        if(lib == "work") {
+            lib = df.GetTargetLib();
+            cout << "lib name is work, searching in target library \'" << lib << "\' instead" << endl;
+            o.replace(libBegin+1, libEnd-libBegin-1, lib);
+        }
         string symName = o.substr(libEnd+1);
         if(!mCfg->IsSysLib(lib)) {
 
@@ -142,15 +242,16 @@ StrList MakefileGen::GetDependencies(DesignFile const & df) {
 
 string MakefileGen::GenerateRule(DesignFile const & df) {
     auto deps = GetDependencies(df);
-    string rule = df.GetName() + ".done: " + mCfg->GetLibPath() + '/' + df.GetTargetLib() + " " + df.GetName() + " ";
+    string rule = df.GetName() + ".done: " + mCfg->GetLibPath()+ "/libs.done " + df.GetName() + " ";
     for(auto & s : deps) {
         rule += s + ".done ";
     }
-
+    
     string libPathWithSep = mCfg->GetLibPath().size() ? mCfg->GetLibPath() + '/' : "";
 
-
-    rule += "\n\tcd " + libPathWithSep + "; " + mCfg->GetCompileCommand() + " " +
+    rule += "\n\t";
+    //rule += "\tcd " + libPathWithSep + "; ";
+    rule +=  mCfg->GetCompileCommand() + " " +
         df.GetTargetLib() + " " + df.GetName() + "\n";
     rule += "\ttouch " + df.GetName() + ".done\n"; 
     return rule + "\n";

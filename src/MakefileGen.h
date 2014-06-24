@@ -37,10 +37,14 @@ public:
     MakefileGen(ConfigFile::Ptr cfg, std::string const & exePath);
 
     std::string Generate();
+    std::string GenerateGuiSimScript() const;
+    std::string GenerateSimScript() const;
+    std::string GenerateHelper(std::string const & dir) const;
 private:
     void DepErr(DesignFile const & df, std::string const & obj);
     util::StrList GetDependencies(DesignFile const & df);
     std::string GenerateRule(DesignFile const & df);
+    std::string GenerateHeader() const;
 
     std::string mExePath;
     ConfigFile::Ptr mCfg;

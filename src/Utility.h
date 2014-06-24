@@ -77,8 +77,37 @@ namespace util {
         return boost::filesystem::system_complete(relative.c_str()).native();
     }
 
+    inline std::string GetDirectory(std::string const & fileName) {
+        fs::path p(fileName);
+        if(fs::is_directory(fileName)) {
+            return fileName;
+        } else {
+            return p.parent_path().native();
+        }
+    }
 
+    template <typename Iterator>
+    class IteratorPair {
+    public:
+        IteratorPair ( Iterator first, Iterator last) : f_ (first), l_ (last) {}
+        Iterator begin () const { return f_; }
+        Iterator end   () const { return l_; }
 
+    private:
+        Iterator f_;
+        Iterator l_;
+    };
+
+    template <typename Iterator>
+    IteratorPair<Iterator> Range( Iterator f, Iterator l ) {
+        return IteratorPair<Iterator> ( f, l );
+    }
+
+    inline std::string Pwd() {
+        return fs::current_path().native();
+    }
+
+    std::string GetRelativePathTo(std::string const & path1, std::string const & path2);
 
 }
 

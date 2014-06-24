@@ -28,6 +28,7 @@
 #include "DesignFile.h"
 #include "ConfigFile.h"
 #include "MakefileGen.h"
+#include <boost/filesystem.hpp>
 
 using namespace std;
 
@@ -37,9 +38,10 @@ int minor = 1;
 void DisplayUsage() {
     cout << endl
          << "vhdmake v" << major << "." << minor << " (c) 2014 Lukas Schuller" << endl << endl
-         << "Usage: vhdmake ( (-s VHDFILE) | [CONFIGFILE] )" << endl
-         << "       With no arguments, configuration file vhdmake.cfg is assumed" << endl
-         << "       vhdmake -s x.vhd shows declarations and dependencies of file x.vhd" << endl << endl
+         << "Usage: vhdmake ( (-s VHDFILE) | [-c] [CONFIGFILE] )" << endl
+         << "       With no arguments, configuration file vhdmake.cfg is assumed." << endl
+         << "       vhdmake -s x.vhd shows declarations and dependencies of file x.vhd." << endl
+         << "       vhdmake -c [CONFIGFILE] removes all potentially generated Makefiles in the source directories." << endl
          << "Example configuration file:" << endl
          << "#----------------------------------------" << endl
          << "# I am a comment" << endl
@@ -55,10 +57,10 @@ void DisplayUsage() {
          << "          Compilation is invoked like this: " << endl
          << "          <VCOM> <targetlib> <hdlfile>" << endl
          << "    VLIB: Command to create library. (Default: \"vlib\")" << endl
+         << "    VMAP: Command to map library. (Default: \"vmap\")" << endl
          << "    RM:   File/directory delete command. (Default: \"rm -rf\")" << endl
          << "    LIBS: Target path for compiled libraries, eg. /tmp/libs (Default: \".\")" << endl
-         << endl;
-    
+         << endl;   
 }
 
 int main(int argc, char* argv[]) {
@@ -79,12 +81,19 @@ int main(int argc, char* argv[]) {
         }
     } else {
         string cfgFile = "vhdmake.cfg";
+        bool clean = false;
         if(argc > 1) {
-            if(argv[1][0] == '-') {
-                DisplayUsage();
-                return -1;
+            if(string(argv[1]) == "-c") {
+                if(argc > 2) cfgFile = argv[2];
+                clean = true;
             }
-            cfgFile = argv[1];
+            else {
+                if(argv[1][0] == '-') {
+                    DisplayUsage();
+                    return -1;
+                }
+                cfgFile = argv[1];
+            }
         }
 
         string exePath = argv[0];
@@ -94,11 +103,53 @@ int main(int argc, char* argv[]) {
             return -1;
         }
         cfg->Print();
-          
-        auto mf = MakefileGen(cfg, exePath).Generate();
-        cout << endl << "Makefile: " << endl << endl << mf << endl;
-        ofstream ofs("Makefile");
-        ofs << mf;
+        util::StrList srcDirs = cfg->GetSourceDirs();
+        srcDirs.push_back(".");
+        if(clean) {
+            cout << "Removing helper scripts" << endl;
+            if(boost::filesystem::exists("sim.do"))
+                boost::filesystem::remove("sim.do");                
+            if(boost::filesystem::exists("sim_gui.do"))
+                boost::filesystem::remove("sim_gui.do");                
+            for(auto dir : srcDirs) {
+                string mfName = dir + "/Makefile";
+                cout << "Removing " << mfName << endl;
+                if(boost::filesystem::exists(mfName))
+                    boost::filesystem::remove(mfName);                
+            }
+
+            return 0;
+        }
+        auto gen = MakefileGen(cfg, exePath);
+
+//        cout << endl << "Makefile: " << endl << endl << mf << endl;
+        ofstream ofmf("Makefile");
+        auto mainMf = gen.Generate();
+        if(mainMf.empty()) {
+            cerr << "Aborting" << endl;
+            return -1;
+        }
+        ofmf << mainMf;
+        ofmf.close();
+
+        ofstream ofsim("sim.do");
+        ofsim << gen.GenerateSimScript();
+        ofsim.close();
+
+        ofstream ofsimgui("sim_gui.do");
+        ofsimgui << gen.GenerateGuiSimScript();
+        ofsimgui.close();
+
+
+        for(auto dir : srcDirs) {
+            if(dir == "." || dir.empty()) continue;
+            string mfName = dir + "/Makefile";
+            ofstream helper(mfName.c_str());
+            cout << "Generating helper for directory " << dir << endl;
+            helper << gen.GenerateHelper(dir);
+            helper.close();
+        }
     }
+
     return 0;
 }

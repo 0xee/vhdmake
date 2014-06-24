@@ -1082,7 +1082,7 @@ BlockDeclarativeItem  =
     .
 
 ProcessStatement =
-    process [lparen NameList rparen] [is]
+    process [lparen [NameList | "all"] rparen] [is]
         { ProcessDeclarativeItem }
     begin
         SequentialStatementList

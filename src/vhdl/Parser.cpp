@@ -412,13 +412,19 @@ void Parser::ProcessStatement() {
 		Expect(_process);
 		if (la->kind == _lparen) {
 			Get();
-			NameList();
+			if (StartOf(10)) {
+				if (la->kind == _basicIdentifier || la->kind == _extendedIdentifier || la->kind == _stringLiteral) {
+					NameList();
+				} else {
+					Get();
+				}
+			}
 			Expect(_rparen);
 		}
 		if (la->kind == _is) {
 			Get();
 		}
-		while (StartOf(10)) {
+		while (StartOf(11)) {
 			ProcessDeclarativeItem();
 		}
 		Expect(_begin);
@@ -618,7 +624,7 @@ void Parser::NamedSelectedName(std::string & n) {
 }
 
 void Parser::BlockDeclarativeItem() {
-		while (!(StartOf(11))) {SynErr(141); Get();}
+		while (!(StartOf(12))) {SynErr(141); Get();}
 		if (StartOf(9)) {
 			SubprogramDeclarationOrBody();
 		} else if (la->kind == _type) {
@@ -655,13 +661,13 @@ void Parser::BlockDeclarativeItem() {
 }
 
 void Parser::ArchitectureStatementList() {
-		while (StartOf(12)) {
+		while (StartOf(13)) {
 			ArchitectureStatement();
 		}
 }
 
 void Parser::ConfigurationDeclarativeItem() {
-		while (!(StartOf(13))) {SynErr(143); Get();}
+		while (!(StartOf(14))) {SynErr(143); Get();}
 		if (la->kind == _use) {
 			UseClause();
 		} else if (la->kind == _group) {
@@ -699,7 +705,7 @@ void Parser::BlockConfiguration() {
 void Parser::BlockConfigurationIndex() {
 		if (isDiscreteRangeInBlockConfigurationIndex()) {
 			DiscreteRange();
-		} else if (StartOf(14)) {
+		} else if (StartOf(15)) {
 			Expression();
 		} else SynErr(145);
 }
@@ -707,14 +713,14 @@ void Parser::BlockConfigurationIndex() {
 void Parser::DiscreteRange() {
 		if (isSubtypeIndicationInDiscreteRange()) {
 			SubtypeIndication();
-		} else if (StartOf(14)) {
+		} else if (StartOf(15)) {
 			Range();
 		} else SynErr(146);
 }
 
 void Parser::Expression() {
 		Relation();
-		while (StartOf(15)) {
+		while (StartOf(16)) {
 			LogicalOperator();
 			Relation();
 		}
@@ -736,7 +742,7 @@ void Parser::BlockSpecification() {
 void Parser::ComponentConfiguration() {
 		Expect(_for);
 		ComponentSpecification();
-		if (StartOf(16)) {
+		if (StartOf(17)) {
 			BindingIndication();
 			Expect(_semicolon);
 		}
@@ -768,7 +774,7 @@ void Parser::BindingIndication() {
 }
 
 void Parser::PackageDeclarativeItem() {
-		while (!(StartOf(17))) {SynErr(148); Get();}
+		while (!(StartOf(18))) {SynErr(148); Get();}
 		if (StartOf(9)) {
 			SubprogramDeclaration();
 		} else if (la->kind == _type) {
@@ -828,7 +834,7 @@ void Parser::ComponentDeclaration() {
 }
 
 void Parser::PackageBodyDeclarativeItem() {
-		while (!(StartOf(18))) {SynErr(150); Get();}
+		while (!(StartOf(19))) {SynErr(150); Get();}
 		if (StartOf(9)) {
 			SubprogramDeclarationOrBody();
 		} else if (la->kind == _type) {
@@ -913,7 +919,7 @@ void Parser::TypeMark() {
 
 void Parser::SubprogramBody() {
 		Expect(_is);
-		while (StartOf(10)) {
+		while (StartOf(11)) {
 			SubprogramDeclarativeItem();
 		}
 		Expect(_begin);
@@ -932,7 +938,7 @@ void Parser::SubprogramBody() {
 }
 
 void Parser::SubprogramDeclarativeItem() {
-		while (!(StartOf(19))) {SynErr(154); Get();}
+		while (!(StartOf(20))) {SynErr(154); Get();}
 		if (StartOf(9)) {
 			SubprogramDeclarationOrBody();
 		} else if (la->kind == _type) {
@@ -961,7 +967,7 @@ void Parser::SubprogramDeclarativeItem() {
 }
 
 void Parser::SequentialStatementList() {
-		while (StartOf(20)) {
+		while (StartOf(21)) {
 			SequentialStatement();
 		}
 }
@@ -1074,7 +1080,7 @@ void Parser::FileTypeDefinition() {
 void Parser::ProtectedTypeBody() {
 		Expect(_protected);
 		Expect(_body);
-		while (StartOf(10)) {
+		while (StartOf(11)) {
 			ProtectedTypeBodyDeclarativeItem();
 		}
 		Expect(_end);
@@ -1087,7 +1093,7 @@ void Parser::ProtectedTypeBody() {
 
 void Parser::ProtectedTypeDeclaration() {
 		Expect(_protected);
-		while (StartOf(21)) {
+		while (StartOf(22)) {
 			ProtectedTypeDeclarativeItem();
 		}
 		Expect(_end);
@@ -1127,7 +1133,7 @@ void Parser::AliasDesignator() {
 
 void Parser::Name() {
 		Prefix();
-		while (StartOf(22)) {
+		while (StartOf(23)) {
 			NamePart();
 		}
 }
@@ -1145,7 +1151,7 @@ void Parser::Signature() {
 }
 
 void Parser::EntityNameList() {
-		if (StartOf(23)) {
+		if (StartOf(24)) {
 			EntityDesignator();
 			while (la->kind == _comma) {
 				Get();
@@ -1381,7 +1387,7 @@ void Parser::IndexConstraint() {
 }
 
 void Parser::ProtectedTypeDeclarativeItem() {
-		while (!(StartOf(24))) {SynErr(168); Get();}
+		while (!(StartOf(25))) {SynErr(168); Get();}
 		if (StartOf(9)) {
 			SubprogramDeclaration();
 		} else if (la->kind == _attribute) {
@@ -1392,7 +1398,7 @@ void Parser::ProtectedTypeDeclarativeItem() {
 }
 
 void Parser::ProtectedTypeBodyDeclarativeItem() {
-		while (!(StartOf(19))) {SynErr(170); Get();}
+		while (!(StartOf(20))) {SynErr(170); Get();}
 		if (StartOf(9)) {
 			SubprogramDeclarationOrBody();
 		} else if (la->kind == _type) {
@@ -1457,16 +1463,16 @@ void Parser::ArchitectureStatement() {
 			LabelColon();
 			if (isArchitectureStatementWithLabel()) {
 				ArchitectureStatementWithLabel();
-			} else if (StartOf(12)) {
+			} else if (StartOf(13)) {
 				ArchitectureStatementOptionalLabel();
 			} else SynErr(174);
-		} else if (StartOf(12)) {
+		} else if (StartOf(13)) {
 			ArchitectureStatementOptionalLabel();
 		} else SynErr(175);
 }
 
 void Parser::ArchitectureStatementWithLabel() {
-		if (StartOf(25)) {
+		if (StartOf(26)) {
 			ComponentInstantiationStatement();
 		} else if (la->kind == _block) {
 			BlockStatement();
@@ -1492,7 +1498,7 @@ void Parser::ArchitectureStatementOptionalLabel() {
 
 void Parser::ComponentInstantiationStatement() {
 		std::string ent, arch; 
-		if (StartOf(26)) {
+		if (StartOf(27)) {
 			if (la->kind == _component) {
 				Get();
 			}
@@ -1565,7 +1571,7 @@ void Parser::GenerateStatement() {
 }
 
 void Parser::ConcurrentSignalAssignmentStatement() {
-		if (StartOf(27)) {
+		if (StartOf(28)) {
 			ConditionalSignalAssignment();
 		} else if (la->kind == _with) {
 			SelectedSignalAssignment();
@@ -1589,7 +1595,7 @@ void Parser::NameList() {
 }
 
 void Parser::ProcessDeclarativeItem() {
-		while (!(StartOf(19))) {SynErr(181); Get();}
+		while (!(StartOf(20))) {SynErr(181); Get();}
 		if (StartOf(9)) {
 			SubprogramDeclarationOrBody();
 		} else if (la->kind == _type) {
@@ -1687,7 +1693,7 @@ void Parser::ConditionalWaveforms() {
 }
 
 void Parser::Waveform() {
-		if (StartOf(14)) {
+		if (StartOf(15)) {
 			WaveformElement();
 			while (la->kind == _comma) {
 				Get();
@@ -1751,7 +1757,7 @@ void Parser::IfGenerateStatement() {
 }
 
 void Parser::GenerateStatementBody() {
-		if (StartOf(28)) {
+		if (StartOf(29)) {
 			while (StartOf(4)) {
 				BlockDeclarativeItem();
 			}
@@ -1764,7 +1770,7 @@ void Parser::SequentialStatement() {
 		if (scanner->Peek()->kind==_colon) {
 			LabelColon();
 		}
-		while (!(StartOf(29))) {SynErr(186); Get();}
+		while (!(StartOf(30))) {SynErr(186); Get();}
 		if (la->kind == _wait) {
 			WaitStatement();
 		} else if (la->kind == _assert) {
@@ -1918,7 +1924,7 @@ void Parser::ExitStatement() {
 
 void Parser::ReturnStatement() {
 		Expect(_return);
-		if (StartOf(14)) {
+		if (StartOf(15)) {
 			Expression();
 		}
 		Expect(_semicolon);
@@ -2072,7 +2078,7 @@ void Parser::FormalPart() {
 }
 
 void Parser::ActualPart() {
-		if (StartOf(14)) {
+		if (StartOf(15)) {
 			Expression();
 		} else if (la->kind == _open) {
 			Get();
@@ -2081,7 +2087,7 @@ void Parser::ActualPart() {
 
 void Parser::Relation() {
 		ShiftExpression();
-		if (StartOf(30)) {
+		if (StartOf(31)) {
 			RelationalOperator();
 			ShiftExpression();
 		}
@@ -2119,7 +2125,7 @@ void Parser::LogicalOperator() {
 
 void Parser::ShiftExpression() {
 		SimpleExpression();
-		if (StartOf(31)) {
+		if (StartOf(32)) {
 			ShiftOperator();
 			SimpleExpression();
 		}
@@ -2195,7 +2201,7 @@ void Parser::Sign() {
 
 void Parser::Term() {
 		Factor();
-		while (StartOf(32)) {
+		while (StartOf(33)) {
 			MultiplyingOperator();
 			Factor();
 		}
@@ -2224,7 +2230,7 @@ void Parser::MultiplyingOperator() {
 }
 
 void Parser::Factor() {
-		if (StartOf(33)) {
+		if (StartOf(34)) {
 			Primary();
 			if (la->kind == _doublestar) {
 				Get();
@@ -2245,7 +2251,7 @@ void Parser::Primary() {
 			QualifiedExpression();
 		} else if (la->kind == _basicIdentifier || la->kind == _extendedIdentifier || la->kind == _stringLiteral) {
 			Name();
-		} else if (StartOf(34)) {
+		} else if (StartOf(35)) {
 			Literal();
 		} else if (la->kind == _new) {
 			Allocator();
@@ -2297,7 +2303,7 @@ void Parser::Allocator() {
 		SelectedName();
 		if (la->kind == _apostrophe) {
 			QualifiedExpression();
-		} else if (StartOf(35)) {
+		} else if (StartOf(36)) {
 			if (la->kind == _lparen) {
 				IndexConstraint();
 			}
@@ -2404,7 +2410,7 @@ void Parser::ElementAssociation() {
 void Parser::Choice() {
 		if (isRangeInChoice()) {
 			DiscreteRange();
-		} else if (StartOf(14)) {
+		} else if (StartOf(15)) {
 			SimpleExpression();
 		} else if (la->kind == _others) {
 			Get();
@@ -2527,7 +2533,7 @@ bool Parser::StartOf(int s) {
 	const bool T = true;
 	const bool x = false;
 
-	static bool set[36][134] = {
+	static bool set[37][134] = {
 		{T,T,T,x, x,x,T,x, x,x,x,x, x,T,x,x, x,x,T,T, x,x,x,x, x,T,T,x, T,T,x,x, x,x,x,T, T,T,T,x, x,T,x,T, T,x,x,x, x,x,x,x, x,T,x,x, x,x,T,x, x,T,x,x, x,x,x,x, x,x,x,T, x,x,T,x, x,x,x,x, T,T,x,x, x,x,T,T, x,x,x,x, T,x,x,x, T,x,x,x, T,T,T,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,T,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x},
 		{x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, T,x,x,x, x,x,x,x, x,x,x,T, x,x,x,x, x,x,T,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,T,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x},
 		{x,x,x,x, x,x,x,x, x,x,x,x, x,T,x,x, x,x,x,T, x,x,x,x, x,x,x,x, T,T,x,x, x,x,x,x, T,x,T,x, x,T,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,T, x,x,T,x, x,x,x,x, x,x,x,x, x,x,T,T, x,x,x,x, T,x,x,x, T,x,x,x, T,T,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x},
@@ -2538,6 +2544,7 @@ bool Parser::StartOf(int s) {
 		{x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,T, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,T,x,T, x,x,x,T, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,T, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x},
 		{T,x,x,x, x,x,x,x, x,x,x,x, x,T,x,x, x,x,x,T, x,x,x,x, x,x,x,x, T,T,x,x, x,x,x,x, T,x,T,x, x,T,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,T, x,x,T,x, x,x,x,x, x,x,x,x, x,x,T,T, x,x,x,x, T,x,x,x, T,x,x,x, T,T,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x},
 		{x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,T,x, x,x,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,T, x,x,T,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x},
+		{x,T,T,x, x,x,T,x, x,x,x,x, x,x,T,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x},
 		{x,x,x,x, x,x,x,x, x,x,x,x, x,T,x,x, x,x,x,T, x,x,x,x, x,x,x,x, T,x,x,x, x,x,x,x, T,x,T,x, x,T,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,T, x,x,T,x, x,x,x,x, x,x,x,x, x,x,T,x, x,x,x,x, T,x,x,x, T,x,x,x, T,T,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x},
 		{T,x,x,x, x,x,x,x, x,x,x,x, x,T,x,x, x,x,x,T, x,x,x,x, x,x,T,x, T,T,x,x, x,x,x,x, T,T,T,x, x,T,x,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,T, x,x,T,x, x,x,x,x, x,x,x,x, x,x,T,T, x,x,x,x, T,x,x,x, T,x,x,x, T,T,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x},
 		{x,T,T,x, x,x,T,x, x,x,x,x, x,x,x,x, x,x,T,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,T,x, T,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x,x,x, x,T,x,x, x,x,x,x, x,x,x,x, x,x,T,x, x,x,x,x, x,x,x,x, x,x,x,x, x,x},

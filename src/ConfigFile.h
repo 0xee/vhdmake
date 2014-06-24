@@ -83,6 +83,21 @@ public:
         return lib->second;
     }
 
+    util::StrList GetSourceDirs() {
+        util::StrList srcDirs;
+
+        for(auto const & lib : mLibs) {
+            for(auto const & f : mFiles[lib]) {                
+                srcDirs.push_back(util::GetDirectory(f));
+            }
+        }
+
+        sort(srcDirs.begin(), srcDirs.end());
+        auto last = unique(srcDirs.begin(), srcDirs.end());
+
+        return util::StrList(srcDirs.begin(), last);
+    }
+
     inline void AddSysLib(std::string const & lib) {
         mSysLibs.push_back(lib);
     }
